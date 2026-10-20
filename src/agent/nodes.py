@@ -10,26 +10,35 @@ from src.tools.policy_tools import query_policy
 from src.tools.return_tools import process_return_request
 
 
-def routing_node(state: CustomerServiceState) -> CustomerServiceState:
-    """路由节点 - 意图分类"""
-    last_message = state["messages"][-1].content.lower()
+def routing_node(state: CustomerServiceState, llm) -> CustomerServiceState:
+    """路由节点 - 使用LLM进行意图分类"""
+    last_message = state["messages"][-1].content
 
-    if any(word in last_message for word in ["你好", "hi", "hello", "在吗", "嗨"]):
-        next_node = "greeting_node"
-    elif any(word in last_message for word in ["退货", "换货", "退款", "退换"]):
-        next_node = "return_exchange_node"
-    elif any(word in last_message for word in ["订单", "查单", "什么时候到", "发货", "物流", "到了吗"]):
-        next_node = "order_query_node"
-    elif any(word in last_message for word in ["运费", "支付", "联系客服", "积分"]):
-        next_node = "faq_node"
-    elif any(word in last_message for word in ["政策", "规定", "规则", "会员"]):
-        next_node = "policy_query_node"
-    elif any(word in last_message for word in ["谢谢", "再见", "bye", "拜拜"]):
-        next_node = "goodbye_node"
-    else:
-        next_node = "faq_node"
+    prompt = f"""你是一个电商客服意图分类器。请根据用户消息判断用户意图。
 
-    return {"next_node": next_node}
+用户消息: {last_message}
+
+可选意图:
+- greeting_node: 用户在问候或打招呼
+- order_query_node: 用户在查询订单状态
+- return_exchange_node: 用户在申请退换货
+- policy_query_node: 用户在询问政策（如配送政策、退换货政策、会员政策）
+- faq_node: 用户在咨询常见问题（如运费、支付方式、联系客服）
+- goodbye_node: 用户在说再见或结束对话
+
+请只返回一个意图名称，不要其他内容。"""
+
+    response = llm.invoke(prompt)
+    intent = response.content.strip().lower()
+
+    # 验证返回的意图是否有效
+    valid_intents = ["greeting_node", "order_query_node", "return_exchange_node",
+                     "policy_query_node", "faq_node", "goodbye_node"]
+
+    if intent not in valid_intents:
+        intent = "faq_node"
+
+    return {"next_node": intent}
 
 
 def extract_order_id(text: str) -> str:

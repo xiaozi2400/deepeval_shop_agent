@@ -1,5 +1,6 @@
 """电商客服Agent核心类"""
 import os
+from functools import partial
 
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
@@ -22,7 +23,7 @@ load_dotenv()
 class CustomerServiceAgent:
     """电商客服Agent"""
 
-    def __init__(self, use_llm_routing: bool = False):
+    def __init__(self, use_llm_routing: bool = True):
         """
         初始化Agent
 
@@ -54,8 +55,11 @@ class CustomerServiceAgent:
         """构建LangGraph"""
         builder = StateGraph(CustomerServiceState)
 
+        # 使用partial将llm绑定到routing_node
+        routing_with_llm = partial(routing_node, llm=self.llm)
+
         # 添加节点
-        builder.add_node("routing", routing_node)
+        builder.add_node("routing", routing_with_llm)
         builder.add_node("faq", faq_node)
         builder.add_node("order_query", order_query_node)
         builder.add_node("return_exchange", return_exchange_node)
