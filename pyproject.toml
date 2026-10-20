@@ -1,0 +1,20 @@
+[project]
+name = "ecommerce-customer-service"
+version = "0.1.0"
+description = "E-commerce Customer Service Agent with LangGraph and Claude"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
+
+[tool.deepeval]
+metrics = [
+    "answer_relevancy",
+    "faithfulness",
+    "contextual_precision",
+    "contextual_recall",
+    "hallucination",
+    "toxicity"
+]
