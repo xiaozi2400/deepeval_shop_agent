@@ -49,7 +49,7 @@ class TestAgentFlow:
 
     def test_return_policy_query(self, agent):
         result = agent.invoke("退货政策")
-        assert result["intent"].value == "return_exchange"
+        assert result["intent"].value == "policy_query"
 
     def test_faq_shipping_cost(self, agent):
         result = agent.invoke("运费如何计算")
@@ -77,7 +77,7 @@ class TestAgentFlow:
         assert result2["intent"].value == "order_query"
 
         result3 = agent.invoke("退货政策")
-        assert result3["intent"].value == "return_exchange"
+        assert result3["intent"].value == "policy_query"
 
         result4 = agent.invoke("谢谢再见")
         assert result4["intent"].value == "goodbye"
