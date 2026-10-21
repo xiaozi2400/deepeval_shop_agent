@@ -1,10 +1,19 @@
 """FAQ检索工具"""
+from langchain_core.tools import tool
 
 from src.data.faq_data import FAQ_DATA
 
 
+@tool
 def search_faq(query: str) -> str:
-    """关键词匹配FAQ"""
+    """搜索FAQ知识库回答用户问题。
+
+    Args:
+        query: 用户问题文本
+
+    Returns:
+        匹配到的FAQ内容和答案
+    """
     query_lower = query.lower()
     best_match = None
     best_score = 0
@@ -24,6 +33,18 @@ def search_faq(query: str) -> str:
     return "抱歉，暂时没有找到与您问题相关的信息。请问您是否需要转人工客服？"
 
 
-def get_all_faqs() -> list[dict]:
-    """获取所有FAQ"""
-    return FAQ_DATA
+@tool
+def get_all_faqs() -> str:
+    """获取所有FAQ问题列表。
+
+    Returns:
+        所有FAQ问题的列表
+    """
+    if not FAQ_DATA:
+        return "暂无FAQ记录"
+
+    result = []
+    for i, faq in enumerate(FAQ_DATA, 1):
+        result.append(f"{i}. {faq['question']}")
+
+    return "常见问题列表：\n" + "\n".join(result)

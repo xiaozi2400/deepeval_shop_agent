@@ -3,7 +3,7 @@ import time
 
 import streamlit as st
 
-from src.agent.customer_service_agent import CustomerServiceAgent
+from src.agent.react_agent import ReactCustomerServiceAgent
 
 # 页面配置
 st.set_page_config(
@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 st.title("🤖 电商客服助手")
-st.caption("基于 LangGraph 的智能客服系统")
+st.caption("基于 LangChain ReAct 的智能客服系统")
 
 
 def init_session_state():
@@ -22,7 +22,7 @@ def init_session_state():
         st.session_state.messages = []
     if "agent" not in st.session_state:
         try:
-            st.session_state.agent = CustomerServiceAgent()
+            st.session_state.agent = ReactCustomerServiceAgent()
         except ValueError as e:
             st.error(f"初始化失败: {e}")
             st.info("请确保已设置 OPENAI_API_KEY 环境变量")
@@ -45,17 +45,22 @@ def stream_agent_response(user_message: str):
     """流式获取Agent回复"""
     try:
         full_response = ""
-        for node_output in st.session_state.agent.stream(user_message):
-            # 从节点输出中提取AI消息
-            for node_state in node_output.values():
-                if "messages" in node_state:
-                    messages = node_state["messages"]
-                    if messages:
-                        content = messages[-1].content
-                        if content:
-                            full_response = content
-                            yield content
-                            time.sleep(0.03)
+        for event in st.session_state.agent.stream(user_message):
+            # 从事件中提取 AI 消息
+            if hasattr(event, 'content') and event.content:
+                full_response = event.content
+                yield event.content
+                time.sleep(0.03)
+            elif isinstance(event, dict):
+                for value in event.values():
+                    if isinstance(value, dict) and "messages" in value:
+                        messages = value["messages"]
+                        if messages:
+                            content = messages[-1].content
+                            if content:
+                                full_response = content
+                                yield content
+                                time.sleep(0.03)
         if not full_response:
             yield "抱歉，我没有收到回复。"
     except Exception as e:
