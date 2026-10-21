@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "claude-graph": {
+      "command": "claude-graph",
+      "args": [
+        "serve"
+      ]
+    }
+  }
+}
