@@ -33,6 +33,10 @@ class CustomerServiceAgent:
         self.use_llm_routing = use_llm_routing
         self.use_llm_response = use_llm_response
 
+        # 初始化数据库
+        from src.database.connection import init_db
+        init_db()
+
         if use_llm_routing or use_llm_response:
             api_key = os.getenv("OPENAI_API_KEY")
             base_url = os.getenv("OPENAI_BASE_URL")

@@ -18,16 +18,33 @@ class TestOrderTools:
         assert order is None
 
     def test_cancel_pending_order(self):
-        from src.data.mock_orders import MOCK_ORDERS
-        original_status = MOCK_ORDERS["ORD2024003"].status
+        from src.database.connection import get_session
+        from src.database.repositories.order_repository import SQLiteOrderRepository
+        # 获取仓库并查询原始状态
+        with get_session() as session:
+            repo = SQLiteOrderRepository(session)
+            original_order = repo.get_by_id("ORD2024003")
+            original_status = original_order.status
+        # 取消订单
         result = cancel_order("ORD2024003")
         assert result["success"] is True
-        MOCK_ORDERS["ORD2024003"].status = original_status
+        # 恢复订单状态
+        with get_session() as session:
+            repo = SQLiteOrderRepository(session)
+            repo.update_status("ORD2024003", original_status)
 
     def test_cancel_shipped_order(self):
         result = cancel_order("ORD2024001")
         assert result["success"] is False
         assert "无法取消" in result["message"]
+
+    def test_get_valid_order_ids(self):
+        from src.tools.order_tools import get_valid_order_ids
+        ids = get_valid_order_ids()
+        assert "ORD2024001" in ids
+        assert "ORD2024002" in ids
+        assert "ORD2024003" in ids
+        assert "ORD2024004" in ids
 
 
 class TestFAQQueries:

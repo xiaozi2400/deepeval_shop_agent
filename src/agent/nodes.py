@@ -87,8 +87,8 @@ def _keyword_based_routing(message: str) -> str:
 
 def extract_order_id(text: str) -> str:
     """从文本中提取订单号"""
-    from src.data.mock_orders import MOCK_ORDERS
-    valid_order_ids = set(MOCK_ORDERS.keys())
+    from src.tools.order_tools import get_valid_order_ids
+    valid_order_ids = get_valid_order_ids()
 
     patterns = [
         r'ORD\d{7}',                           # ORD2024001 格式
