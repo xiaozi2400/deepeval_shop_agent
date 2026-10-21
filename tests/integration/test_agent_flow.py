@@ -81,3 +81,63 @@ class TestAgentFlow:
 
         result4 = agent.invoke("谢谢再见")
         assert result4["intent"].value == "goodbye"
+
+
+class TestResponseMode:
+    """测试响应模式和新字段"""
+
+    @pytest.fixture
+    def agent_rule(self):
+        """纯规则模式Agent"""
+        return CustomerServiceAgent(use_llm_routing=False, use_llm_response=False)
+
+    @pytest.fixture
+    def agent_llm(self):
+        """LLM模式Agent（如果可用）"""
+        try:
+            return CustomerServiceAgent(use_llm_routing=True, use_llm_response=True)
+        except ValueError:
+            pytest.skip("LLM not configured")
+
+    def test_faq_response_mode_rule(self, agent_rule):
+        """FAQ节点规则模式"""
+        result = agent_rule.invoke("运费如何计算")
+        assert result["response_mode"] == "rule"
+        assert result["retrieved_content"] is not None
+
+    def test_order_response_mode_rule(self, agent_rule):
+        """订单节点规则模式"""
+        result = agent_rule.invoke("查一下订单ORD2024001")
+        assert result["response_mode"] == "rule"
+        assert result["retrieved_content"] is not None
+        assert "ORD2024001" in result["retrieved_content"]
+
+    def test_policy_response_mode_rule(self, agent_rule):
+        """政策节点规则模式"""
+        result = agent_rule.invoke("配送政策是什么")
+        assert result["response_mode"] == "rule"
+        assert result["retrieved_content"] is not None
+
+    def test_return_response_mode_rule(self, agent_rule):
+        """退换货节点规则模式"""
+        result = agent_rule.invoke("退货订单ORD2024003")
+        assert result["response_mode"] == "rule"
+        assert result["return_request"] is not None
+
+    def test_greeting_no_retrieved_content(self, agent_rule):
+        """问候节点无retrieved_content"""
+        result = agent_rule.invoke("你好")
+        assert result["retrieved_content"] is None
+        assert result["response_mode"] == "rule"
+
+    def test_faq_response_mode_llm(self, agent_llm):
+        """FAQ节点LLM模式"""
+        result = agent_llm.invoke("运费如何计算")
+        assert result["response_mode"] == "llm"
+        assert result["retrieved_content"] is not None
+
+    def test_order_response_mode_llm(self, agent_llm):
+        """订单节点LLM模式"""
+        result = agent_llm.invoke("查一下订单ORD2024001")
+        assert result["response_mode"] == "llm"
+        assert result["retrieved_content"] is not None

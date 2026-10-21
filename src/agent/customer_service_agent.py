@@ -22,16 +22,18 @@ load_dotenv()
 
 class CustomerServiceAgent:
     """电商客服Agent"""
-    def __init__(self, use_llm_routing: bool = True):
+    def __init__(self, use_llm_routing: bool = True, use_llm_response: bool = True):
         """
         初始化Agent
 
         Args:
             use_llm_routing: 是否使用LLM进行路由（需要配置API）
+            use_llm_response: 是否使用LLM生成回答（需要配置API）
         """
         self.use_llm_routing = use_llm_routing
+        self.use_llm_response = use_llm_response
 
-        if use_llm_routing:
+        if use_llm_routing or use_llm_response:
             api_key = os.getenv("OPENAI_API_KEY")
             base_url = os.getenv("OPENAI_BASE_URL")
             model_name = os.getenv("MODEL_NAME", "gpt-4o")
@@ -54,15 +56,19 @@ class CustomerServiceAgent:
         """构建LangGraph"""
         builder = StateGraph(CustomerServiceState)
 
-        # 使用partial将llm绑定到routing_node
+        # 使用partial将llm绑定到各节点
         routing_with_llm = partial(routing_node, llm=self.llm)
+        faq_with_llm = partial(faq_node, llm=self.llm)
+        policy_with_llm = partial(policy_query_node, llm=self.llm)
+        order_with_llm = partial(order_query_node, llm=self.llm)
+        return_with_llm = partial(return_exchange_node, llm=self.llm)
 
         # 添加节点
         builder.add_node("routing", routing_with_llm)
-        builder.add_node("faq", faq_node)
-        builder.add_node("order_query", order_query_node)
-        builder.add_node("return_exchange", return_exchange_node)
-        builder.add_node("policy_query", policy_query_node)
+        builder.add_node("faq", faq_with_llm)
+        builder.add_node("order_query", order_with_llm)
+        builder.add_node("return_exchange", return_with_llm)
+        builder.add_node("policy_query", policy_with_llm)
         builder.add_node("greeting", greeting_node)
         builder.add_node("goodbye", goodbye_node)
 
@@ -101,7 +107,9 @@ class CustomerServiceAgent:
             "current_node": "start",
             "next_node": "",
             "context": {},
-            "user_id": user_id
+            "user_id": user_id,
+            "response_mode": None,
+            "retrieved_content": None
         }
         return self.graph.invoke(initial_state)
 
@@ -117,7 +125,9 @@ class CustomerServiceAgent:
             "current_node": "start",
             "next_node": "",
             "context": {},
-            "user_id": user_id
+            "user_id": user_id,
+            "response_mode": None,
+            "retrieved_content": None
         }
         yield from self.graph.stream(initial_state)
 

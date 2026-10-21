@@ -113,47 +113,88 @@ def extract_order_id(text: str) -> str:
     return ""
 
 
-def faq_node(state: CustomerServiceState) -> CustomerServiceState:
-    """FAQ问答节点"""
+def faq_node(state: CustomerServiceState, llm=None) -> CustomerServiceState:
+    """FAQ问答节点 - 支持LLM生成"""
     last_message = state["messages"][-1].content
-    answer = search_faq(last_message)
+
+    # Step 1: 关键词匹配找到相关内容
+    matched_content = search_faq(last_message)
+
+    # Step 2: LLM生成自然语言回复
+    if llm:
+        prompt = f"""基于以下信息回答用户问题：
+
+用户问题: {last_message}
+
+相关知识库内容:
+{matched_content}
+
+请用友好、专业的语气回答用户问题。如果知识库内容不足以回答，请说明而非编造。"""
+        response = llm.invoke(prompt).content
+        response_mode = "llm"
+    else:
+        response = matched_content
+        response_mode = "rule"
 
     return {
-        "messages": [AIMessage(content=answer)],
+        "messages": [AIMessage(content=response)],
         "intent": Intent.FAQ,
+        "response_mode": response_mode,
+        "retrieved_content": matched_content,
         "current_node": "faq_node"
     }
 
 
-def order_query_node(state: CustomerServiceState) -> CustomerServiceState:
-    """订单查询节点"""
+def order_query_node(state: CustomerServiceState, llm=None) -> CustomerServiceState:
+    """订单查询节点 - 支持LLM生成"""
     last_message = state["messages"][-1].content
 
     order_id = extract_order_id(last_message)
     order_info = None
+    matched_content = None
+
     if order_id:
         order_info = query_order(order_id)
         if order_info:
-            response = format_order_info(order_info)
+            matched_content = format_order_info(order_info)
+            if llm:
+                prompt = f"""基于以下订单信息，用自然语言回答用户：
+
+用户问题: {last_message}
+
+订单信息:
+{matched_content}
+
+请用简洁、友好的语气回复，突出关键信息。"""
+                response = llm.invoke(prompt).content
+                response_mode = "llm"
+            else:
+                response = matched_content
+                response_mode = "rule"
         else:
             response = f"未找到订单号 {order_id}，请确认订单号是否正确。"
+            response_mode = "rule"
     else:
         response = "请提供您的订单号，以便我为您查询。例如：帮我查一下订单ORD2024001"
+        response_mode = "rule"
 
     return {
         "messages": [AIMessage(content=response)],
         "intent": Intent.ORDER_QUERY,
         "order_info": order_info,
+        "response_mode": response_mode,
+        "retrieved_content": matched_content,
         "current_node": "order_query_node"
     }
 
 
-def return_exchange_node(state: CustomerServiceState) -> CustomerServiceState:
-    """退换货处理节点"""
+def return_exchange_node(state: CustomerServiceState, llm=None) -> CustomerServiceState:
+    """退换货处理节点 - 支持LLM生成"""
     from src.agent.state import ReturnRequest
 
     last_message = state["messages"][-1].content
     return_request = None
+    matched_content = None
 
     if "退货" in last_message:
         order_id = extract_order_id(last_message)
@@ -169,9 +210,24 @@ def return_exchange_node(state: CustomerServiceState) -> CustomerServiceState:
                 request_type="return",
                 status="pending"
             )
-            response = f"您的退货申请已受理，退款将在3-5个工作日内原路返回。申请编号: {request_id}"
+            matched_content = f"退货申请已受理，申请编号: {request_id}，退款将在3-5个工作日内原路返回。"
+            if llm:
+                prompt = f"""基于以下退换货申请信息，用自然语言回答用户：
+
+用户问题: {last_message}
+
+申请结果:
+{matched_content}
+
+请用友好、专业的语气确认申请已受理，并提醒用户后续注意事项。"""
+                response = llm.invoke(prompt).content
+                response_mode = "llm"
+            else:
+                response = matched_content
+                response_mode = "rule"
         else:
             response = "请提供您要退货的订单号，例如：退货订单ORD2024003"
+            response_mode = "rule"
     elif "换货" in last_message:
         order_id = extract_order_id(last_message)
         if order_id:
@@ -186,28 +242,66 @@ def return_exchange_node(state: CustomerServiceState) -> CustomerServiceState:
                 request_type="exchange",
                 status="pending"
             )
-            response = f"您的换货申请已受理，我们将尽快为您处理。申请编号: {request_id}"
+            matched_content = f"换货申请已受理，申请编号: {request_id}，我们将尽快为您处理。"
+            if llm:
+                prompt = f"""基于以下退换货申请信息，用自然语言回答用户：
+
+用户问题: {last_message}
+
+申请结果:
+{matched_content}
+
+请用友好、专业的语气确认申请已受理，并提醒用户后续注意事项。"""
+                response = llm.invoke(prompt).content
+                response_mode = "llm"
+            else:
+                response = matched_content
+                response_mode = "rule"
         else:
             response = "请提供您要换货的订单号，例如：换货订单ORD2024001"
+            response_mode = "rule"
     else:
         response = "请问您是需要退货还是换货呢？"
+        response_mode = "rule"
 
     return {
         "messages": [AIMessage(content=response)],
         "intent": Intent.RETURN_EXCHANGE,
         "return_request": return_request,
+        "response_mode": response_mode,
+        "retrieved_content": matched_content,
         "current_node": "return_exchange_node"
     }
 
 
-def policy_query_node(state: CustomerServiceState) -> CustomerServiceState:
-    """政策查询节点"""
+def policy_query_node(state: CustomerServiceState, llm=None) -> CustomerServiceState:
+    """政策查询节点 - 支持LLM生成"""
     last_message = state["messages"][-1].content
-    policy_info = query_policy(last_message)
+
+    # Step 1: 关键词匹配找到相关政策
+    matched_content = query_policy(last_message)
+
+    # Step 2: LLM生成自然语言回复
+    if llm:
+        prompt = f"""基于以下信息回答用户问题：
+
+用户问题: {last_message}
+
+相关政策内容:
+{matched_content}
+
+请用友好、专业的语气回答用户问题。如果政策内容不足以回答，请说明而非编造。"""
+        response = llm.invoke(prompt).content
+        response_mode = "llm"
+    else:
+        response = matched_content
+        response_mode = "rule"
 
     return {
-        "messages": [AIMessage(content=policy_info)],
+        "messages": [AIMessage(content=response)],
         "intent": Intent.POLICY_QUERY,
+        "response_mode": response_mode,
+        "retrieved_content": matched_content,
         "current_node": "policy_query_node"
     }
 
@@ -223,6 +317,8 @@ def greeting_node(state: CustomerServiceState) -> CustomerServiceState:
     return {
         "messages": [AIMessage(content=greeting)],
         "intent": Intent.GREETING,
+        "response_mode": "rule",
+        "retrieved_content": None,
         "current_node": "greeting_node"
     }
 
@@ -232,5 +328,7 @@ def goodbye_node(state: CustomerServiceState) -> CustomerServiceState:
     return {
         "messages": [AIMessage(content="感谢您的咨询，祝您购物愉快！如有需要随时联系我。")],
         "intent": Intent.GOODBYE,
+        "response_mode": "rule",
+        "retrieved_content": None,
         "current_node": "goodbye_node"
     }

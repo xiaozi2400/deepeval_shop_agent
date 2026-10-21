@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, TypedDict
+from typing import Annotated, Literal, TypedDict
 
 from langgraph.graph import add_messages
 
@@ -56,3 +56,6 @@ class CustomerServiceState(TypedDict, total=False):
     next_node: str
     context: dict
     user_id: str | None
+    # 新增字段
+    response_mode: Literal["rule", "llm"] | None  # 响应模式
+    retrieved_content: str | None                  # 检索到的内容
