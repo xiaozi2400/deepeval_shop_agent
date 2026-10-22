@@ -6,30 +6,7 @@
 
 系统提示词在 `src/prompts/system_prompts.py`，意图表在 `src/agent/intent.py`。
 
----
-
-## 项目结构
-
-```
-deepeval_test/
-├── src/
-│   ├── agent/
-│   │   ├── react_agent.py             # ReAct Agent 主体
-│   │   ├── intent.py                  # 意图表与意图回读
-│   │   └── state.py                   # 状态结构
-│   ├── tools/                         # 五个工具
-│   ├── database/                      # SQLite + ORM + 仓储
-│   ├── data/knowledge_data.py         # 统一知识库
-│   ├── prompts/system_prompts.py      # 系统提示词
-│   ├── schemas.py                     # 工具结果模型
-│   └── identifiers.py                 # 订单号归一
-├── tests/
-│   ├── conftest.py / fake_llm.py
-│   ├── unit/test_tools.py / test_intent.py
-│   └── integration/test_agent_flow.py / test_deepeval.py
-├── verify_agent.py
-└── web_chat.py
-```
+目录布局见 README 的"项目结构"一节。
 
 ---
 
@@ -80,8 +57,8 @@ model 节点 ──tool call──► tools 节点 ──observation──► mo
 ## 验证方式
 
 ```bash
-pytest tests/unit -v          # 34 个，不依赖 LLM
-pytest tests/integration -v   # 14 个，需要 OPENAI_API_KEY
-python verify_agent.py        # 五类意图端到端
-streamlit run web_chat.py     # Web 界面
+pytest tests/unit -v           # 34 个，不依赖 LLM
+pytest tests/integration -v    # 14 个，需要 OPENAI_API_KEY
+python scripts/verify_agent.py # 五类意图端到端
+streamlit run app/web_chat.py  # Web 界面
 ```

@@ -1,11 +1,4 @@
-langchain>=1.0
-langchain-core>=1.0
-langchain-openai>=1.0
-langgraph>=1.0
-deepeval>=4.0
-pytest>=8.0.0
-pytest-asyncio>=0.23.0
-python-dotenv>=1.0.0
-pydantic>=2.5.0
-streamlit>=1.28.0
-sqlalchemy>=2.0.0
+# Single source of truth for dependencies: pyproject.toml.
+# Edit [project.dependencies] and [project.optional-dependencies] there.
+# Kept ASCII-only because pip reads this file with the system locale encoding.
+-e .[dev]

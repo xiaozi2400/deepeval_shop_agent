@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 
 # 必须在任何 src.* 被 import 之前把数据库指向临时库。
-# 否则测试会写进开发库 orders.db，把订单状态改脏。
+# 否则测试会写进开发库 data/orders.db，把订单状态改脏。
 _TMP_DB = Path(__file__).parent / ".tmp" / "test.db"
 _TMP_DB.parent.mkdir(parents=True, exist_ok=True)
-os.environ["DATABASE_URL"] = f"sqlite:///{_TMP_DB}"
+os.environ["DATABASE_URL"] = f"sqlite:///{_TMP_DB.as_posix()}"
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

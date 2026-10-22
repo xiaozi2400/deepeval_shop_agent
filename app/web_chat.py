@@ -2,10 +2,17 @@
 
 会话以 Streamlit session 为单位，session id 直接当作 Agent 的 thread_id，
 这样"这个多少钱"这类依赖上一轮的表述在界面上才真的可用。
+
+启动：
+    streamlit run app/web_chat.py
 """
+import sys
 import uuid
+from pathlib import Path
 
 import streamlit as st
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.agent.react_agent import ReactCustomerServiceAgent
 

@@ -5,7 +5,7 @@
 ## 项目结构
 
 ```
-deepeval_test/
+.
 ├── src/
 │   ├── agent/
 │   │   ├── react_agent.py             # ReAct Agent（create_agent + checkpointer）
@@ -37,8 +37,15 @@ deepeval_test/
 │   └── integration/
 │       ├── test_agent_flow.py         # 五类意图的轨迹断言
 │       └── test_deepeval.py           # DeepEval 指标
-├── verify_agent.py                    # 五类意图端到端验证
-└── web_chat.py                        # Streamlit 聊天界面
+├── app/
+│   └── web_chat.py                    # Streamlit 聊天界面
+├── scripts/
+│   └── verify_agent.py                # 五类意图端到端验证
+├── docs/
+│   └── architecture.md                # 架构说明与已知取舍
+├── data/                              # 运行时 SQLite 库，不进版本库
+├── .env.example                       # 环境变量模板
+└── pyproject.toml
 ```
 
 ## 五分类意图
@@ -116,9 +123,15 @@ CustomerServiceState
 pip install -r requirements.txt
 ```
 
+依赖清单的唯一事实来源是 `pyproject.toml`，`requirements.txt` 只做转发。
+
 ### 2. 配置环境变量
 
-在 `.env` 里写：
+```bash
+cp .env.example .env
+```
+
+在 `.env` 里填入真实值：
 
 ```env
 OPENAI_API_KEY=your_api_key_here
@@ -143,12 +156,12 @@ pytest tests -v
 
 集成测试带 `llm` 标记，缺少 `OPENAI_API_KEY` 时自动跳过。
 
-测试用 `tests/conftest.py` 把 `DATABASE_URL` 指向 `tests/.tmp/test.db`，不会碰开发库 `orders.db`。
+测试用 `tests/conftest.py` 把 `DATABASE_URL` 指向 `tests/.tmp/test.db`，不会碰开发库 `data/orders.db`。
 
 ### 4. 五类意图端到端验证
 
 ```bash
-python verify_agent.py
+python scripts/verify_agent.py
 ```
 
 逐条断言 intent 与主工具名。
@@ -156,7 +169,7 @@ python verify_agent.py
 ### 5. Web 界面
 
 ```bash
-streamlit run web_chat.py
+streamlit run app/web_chat.py
 ```
 
 会话以 Streamlit session 为单位，session id 即 `thread_id`，多轮上下文可用。
@@ -204,4 +217,4 @@ result = agent.invoke("这个还有货吗", user_id="u1")
 
 ## License
 
-MIT
+[MIT](LICENSE)

@@ -1,9 +1,17 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+.ruff_cache/
 .venv/
 .env
 *.egg-info/
 tests/.tmp/
 .audit/
 .deepeval/
+
+# 本地工具状态，不进版本库
+.mcp.json
+.claude-graph/
+
+# 运行时数据库，由 init_db() 重新生成
+*.db

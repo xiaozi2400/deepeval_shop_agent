@@ -4,13 +4,19 @@
 两者都从 ReAct 循环里真实的 function call 推导，不看回复文本长什么样。
 
 用法：
-    python verify_agent.py
+    python scripts/verify_agent.py
 """
 import sys
+from pathlib import Path
 
-sys.path.insert(0, '.')
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.agent.intent import Intent, TOOL_ROUTES
+# Windows 控制台默认 GBK，模型回复里的特殊字符会触发 UnicodeEncodeError。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
+from src.agent.intent import TOOL_ROUTES, Intent
 from src.agent.react_agent import ReactCustomerServiceAgent
 
 CASES = [
