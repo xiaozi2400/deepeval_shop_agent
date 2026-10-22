@@ -64,7 +64,7 @@ class ReactCustomerServiceAgent:
         else:
             if model_name is None:
                 model_name = os.getenv("MODEL_NAME")
-            self._init_llm(model_provider, model_name)
+            self._init_llm(model_provider, model_name or None)
 
         self.tools = get_tools()
 
@@ -72,19 +72,22 @@ class ReactCustomerServiceAgent:
 
         self._build_agent()
 
-    def _init_llm(self, provider: str, model_name: str):
+    def _init_llm(self, provider: str, model_name: str | None):
         """初始化 LLM"""
         if provider == "openai":
             api_key = os.getenv("OPENAI_API_KEY")
             base_url = os.getenv("OPENAI_BASE_URL")
 
+            # 环境变量为空字符串时按未配置处理。CI 里未配置的 secret 会被展开成
+            # 空字符串而不是不设该变量，若原样传给 ChatOpenAI，base_url 会变成
+            # 空 URL，所有请求直接失败。
             if not api_key:
                 raise ValueError("OPENAI_API_KEY not found in environment")
 
             self.llm = ChatOpenAI(
-                model=model_name,
+                model=model_name or "gpt-3.5-turbo",
                 api_key=api_key,
-                base_url=base_url,
+                base_url=base_url or None,
                 temperature=self.temperature
             )
         else:
