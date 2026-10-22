@@ -18,6 +18,11 @@ st.set_page_config(
 st.title("🤖 电商客服助手")
 st.caption("基于 LangChain ReAct 的智能客服系统")
 
+REPLYING_STATUS = (
+    '<div style="text-align:left; font-size:0.7rem; color:#9a9a9a; '
+    'margin-top:2px;">🤔 正在回复…</div>'
+)
+
 
 def init_session_state():
     """初始化会话状态"""
@@ -61,13 +66,16 @@ def main():
 
         with st.chat_message("assistant"):
             response_container = st.empty()
-            full_response = ""
+            status_container = st.empty()
+            status_container.markdown(REPLYING_STATUS, unsafe_allow_html=True)
 
+            full_response = ""
             for piece in stream_agent_response(prompt):
                 full_response += piece
                 response_container.markdown(full_response + "▌")
 
             response_container.markdown(full_response)
+            status_container.empty()
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
