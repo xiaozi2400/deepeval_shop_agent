@@ -1,6 +1,0 @@
-﻿# 依赖清单的唯一事实来源是 pyproject.toml，这里只做转发。
-# 直接编辑 pyproject.toml 的 [project.dependencies] 与 [project.optional-dependencies]。
-#
-# 本文件带 UTF-8 BOM：pip 用系统 locale 编码读取 requirements.txt，
-# Windows 中文环境下若无 BOM 会抛 UnicodeDecodeError。
--e .[dev]

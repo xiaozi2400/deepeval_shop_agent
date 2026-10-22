@@ -45,7 +45,8 @@
 │   └── architecture.md                # 架构说明与已知取舍
 ├── data/                              # 运行时 SQLite 库，不进版本库
 ├── .env.example                       # 环境变量模板
-└── pyproject.toml
+├── pyproject.toml                     # 依赖与工具配置的单一事实来源
+└── uv.lock                            # 钉住依赖版本，保证可复现安装
 ```
 
 ## 五分类意图
@@ -120,16 +121,18 @@ CustomerServiceState
 ### 1. 安装依赖
 
 ```bash
-pip install -r requirements.txt
-```
-
-依赖清单的唯一事实来源是 `pyproject.toml`，`requirements.txt` 只做转发。运行时依赖在 `[project.dependencies]`，测试与 lint 依赖在 `[project.optional-dependencies].dev`，所以只跑应用的人不必装整套评测框架。
-
-也可以直接装：
-
-```bash
 pip install -e ".[dev]"
 ```
+
+依赖清单的唯一事实来源是 `pyproject.toml`。运行时依赖在 `[project.dependencies]`，测试与 lint 依赖在 `[project.optional-dependencies].dev`，所以只跑应用的人不必装整套评测框架。
+
+用 [uv](https://docs.astral.sh/uv/) 的话更省事，锁文件保证依赖版本可复现：
+
+```bash
+uv sync --all-extras
+```
+
+`uv.lock` 已提交到仓库，CI 与本地装出的是同一套依赖版本。改完 `pyproject.toml` 的依赖后用 `uv lock` 更新它。
 
 ### 2. 配置环境变量
 
@@ -160,7 +163,7 @@ pytest tests/integration -v
 pytest tests -v
 ```
 
-集成测试带 `llm` 标记，缺少 `OPENAI_API_KEY` 时自动跳过。
+集成测试带 `llm` 标记，缺少 `OPENAI_API_KEY` 时自动跳过。没装 `deepeval` 时 `test_deepeval.py` 整个模块跳过，不会影响其他测试的收集。
 
 测试用 `tests/conftest.py` 把 `DATABASE_URL` 指向 `tests/.tmp/test.db`，不会碰开发库 `data/orders.db`。
 

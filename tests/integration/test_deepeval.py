@@ -7,13 +7,18 @@ import os
 import uuid
 
 import pytest
-from deepeval.metrics import (
-    AnswerRelevancyMetric,
-    FaithfulnessMetric,
-    HallucinationMetric,
-    ToxicityMetric,
-)
-from deepeval.test_case import LLMTestCase
+
+# deepeval 只在 dev extra 里，没装时用 importorskip 让整个模块跳过。
+# 不能写成模块级 from deepeval... ：那会在收集阶段 ImportError，
+# 整个 pytest 会话直接崩掉，而不是跳过这一个模块。
+deepeval_metrics = pytest.importorskip("deepeval.metrics")
+deepeval_test_case = pytest.importorskip("deepeval.test_case")
+
+AnswerRelevancyMetric = deepeval_metrics.AnswerRelevancyMetric
+FaithfulnessMetric = deepeval_metrics.FaithfulnessMetric
+HallucinationMetric = deepeval_metrics.HallucinationMetric
+ToxicityMetric = deepeval_metrics.ToxicityMetric
+LLMTestCase = deepeval_test_case.LLMTestCase
 
 from src.agent.react_agent import ReactCustomerServiceAgent
 
