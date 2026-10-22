@@ -2,6 +2,8 @@
 
 基于 LangChain ReAct + DeepEval 的电商客服 Agent，用于练习对 agent 做轨迹断言与自动化评测。
 
+[![CI](https://github.com/xiaozi2400/deepeval_shop_agent/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaozi2400/deepeval_shop_agent/actions/workflows/ci.yml)
+
 ## 项目结构
 
 ```
