@@ -123,7 +123,13 @@ CustomerServiceState
 pip install -r requirements.txt
 ```
 
-依赖清单的唯一事实来源是 `pyproject.toml`，`requirements.txt` 只做转发。
+依赖清单的唯一事实来源是 `pyproject.toml`，`requirements.txt` 只做转发。运行时依赖在 `[project.dependencies]`，测试与 lint 依赖在 `[project.optional-dependencies].dev`，所以只跑应用的人不必装整套评测框架。
+
+也可以直接装：
+
+```bash
+pip install -e ".[dev]"
+```
 
 ### 2. 配置环境变量
 

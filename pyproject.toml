@@ -5,22 +5,35 @@ description = "E-commerce Customer Service Agent with LangChain ReAct and DeepEv
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+# 运行时依赖：src/ 直接 import 的每一个第三方包。
+# 判据是"代码里 import 了什么"，而不是"装了什么"，
+# 免得上游改版时因为隐式传递依赖而炸掉。
 dependencies = [
     "langchain>=1.0",
     "langchain-core>=1.0",
     "langchain-openai>=1.0",
     "langgraph>=1.0",
-    "deepeval>=4.0",
-    "python-dotenv>=1.0.0",
     "pydantic>=2.5.0",
+    "python-dotenv>=1.0.0",
     "sqlalchemy>=2.0.0",
     "streamlit>=1.28.0",
 ]
 
+# 开发依赖：跑测试与 lint 才需要，不进运行时。
+# deepeval 只被 tests/integration/test_deepeval.py 用到，
+# 放在这里可以让只跑应用的人不必装整套评测框架。
 [project.optional-dependencies]
 dev = [
+    "deepeval>=4.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
+    "ruff>=0.6.0",
 ]
 
 [build-system]
@@ -29,6 +42,10 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["src*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
