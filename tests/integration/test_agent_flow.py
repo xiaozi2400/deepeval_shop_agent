@@ -60,7 +60,7 @@ class TestIntentRouting:
 class TestParameterHandling:
     def test_missing_order_id_still_calls_the_tool(self, agent):
         """分类表规定一轮一意图，所以缺参数时也要产生 tool call"""
-        result = agent.invoke("我的订单到哪了", user_id="case-missing-param")
+        result = agent.invoke("我的订单状态怎么样", user_id="case-missing-param")
         assert result["intent"] == Intent.ORDER_QUERY
         assert result["context"]["tool"] == "query_order"
         assert not normalize_order_id(result["context"]["params"]["order_id"]).startswith("ORD")
