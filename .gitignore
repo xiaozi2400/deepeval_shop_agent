@@ -15,3 +15,7 @@ tests/.tmp/
 
 # 运行时数据库，由 init_db() 重新生成
 *.db
+
+# 构建产物
+build/
+dist/
