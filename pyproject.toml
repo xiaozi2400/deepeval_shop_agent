@@ -1,13 +1,16 @@
 [project]
 name = "ecommerce-customer-service"
 version = "0.1.0"
-description = "E-commerce Customer Service Agent with LangGraph and Claude"
+description = "E-commerce Customer Service Agent with LangChain ReAct and DeepEval"
 requires-python = ">=3.10"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-v --tb=short"
+markers = [
+    "llm: 需要真实 LLM 的测试，缺少 OPENAI_API_KEY 时跳过",
+]
 
 [tool.deepeval]
 metrics = [

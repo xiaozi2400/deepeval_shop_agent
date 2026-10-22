@@ -1,195 +1,206 @@
 # E-commerce Customer Service Agent
 
-基于 LangGraph + Claude 的电商客服 Agent 应用，用于练习 Agent 应用的测试。
+基于 LangChain ReAct + DeepEval 的电商客服 Agent，用于练习对 agent 做轨迹断言与自动化评测。
 
 ## 项目结构
 
 ```
-ecommerce_customer_service/
+deepeval_test/
 ├── src/
 │   ├── agent/
-│   │   ├── customer_service_agent.py   # 核心Agent
-│   │   ├── state.py                  # 状态管理
-│   │   └── nodes.py                  # 节点定义
+│   │   ├── react_agent.py             # ReAct Agent（create_agent + checkpointer）
+│   │   ├── intent.py                  # 五分类意图表与意图回读
+│   │   └── state.py                   # 状态结构与订单状态枚举
 │   ├── tools/
-│   │   ├── order_tools.py            # 订单查询工具
-│   │   ├── faq_tools.py              # FAQ检索工具
-│   │   ├── return_tools.py           # 退换货工具
-│   │   └── policy_tools.py          # 政策查询工具
-│   └── data/
-│       ├── mock_orders.py           # 模拟订单数据
-│       ├── faq_data.py              # FAQ数据
-│       └── policy_data.py           # 政策数据
+│   │   ├── product_tools.py           # 商品查询
+│   │   ├── order_tools.py             # 订单查询
+│   │   ├── logistics_tools.py         # 物流查询
+│   │   ├── policy_tools.py            # 政策查询
+│   │   └── handoff_tools.py           # 转人工兜底
+│   ├── database/
+│   │   ├── connection.py              # SQLite 连接与建表
+│   │   ├── models.py                  # ORM 模型
+│   │   ├── seed.py                    # 种子数据
+│   │   └── repositories/              # 各实体的仓储
+│   ├── data/
+│   │   └── knowledge_data.py          # 统一知识库（政策 + FAQ）
+│   ├── prompts/
+│   │   └── system_prompts.py          # 系统提示词
+│   ├── schemas.py                     # 工具返回的结构化结果模型
+│   └── identifiers.py                 # 订单号归一
 ├── tests/
+│   ├── conftest.py                    # 测试隔离（临时库 + 假模型 fixture）
+│   ├── fake_llm.py                    # 可编程的假模型，驱动真实 ReAct 循环
 │   ├── unit/
-│   │   └── test_tools.py            # 工具单元测试
+│   │   ├── test_tools.py              # 工具单元测试
+│   │   └── test_intent.py             # 意图表与意图回读
 │   └── integration/
-│       └── test_agent_flow.py       # Agent流程集成测试
-├── pyproject.toml
-├── requirements.txt
-└── verify_agent.py                  # 快速验证脚本
+│       ├── test_agent_flow.py         # 五类意图的轨迹断言
+│       └── test_deepeval.py           # DeepEval 指标
+├── verify_agent.py                    # 五类意图端到端验证
+└── web_chat.py                        # Streamlit 聊天界面
 ```
 
-## 功能特性
+## 五分类意图
 
-### 意图识别与路由
-| 意图 | 功能 | 路由关键词 |
-|------|------|-----------|
-| `greeting` | 问候 | 你好、hi、hello、在吗 |
-| `order_query` | 订单查询 | 订单、查单、发货、物流 |
-| `return_exchange` | 退换货 | 退货、换货、退款、退换 |
-| `policy_query` | 政策查询 | 政策、规定、规则、会员 |
-| `faq` | 常见问题 | 运费、支付、联系客服 |
-| `goodbye` | 告别 | 再见、bye |
+每次 function call 就是一次意图判定。工具集严格收敛为五个，`TOOL_ROUTES` 是唯一事实来源。
 
-### 工具模块
-- **order_tools**: 订单查询、取消订单
-- **faq_tools**: FAQ关键词匹配检索
-- **return_tools**: 退换货申请处理
-- **policy_tools**: 配送/退换货/支付/会员政策查询
+| 意图 | 典型问法 | 工具 | 参数 |
+|---|---|---|---|
+| 商品查询 | "这个多少钱""还有货吗" | `query_product` | `sku_id` |
+| 订单查询 | "我的订单到哪了" | `query_order` | `order_id` |
+| 物流查询 | "快递到哪了" | `query_logistics` | `order_id` |
+| 政策查询 | "能七天无理由吗" | `search_policy` | `query` |
+| 兜底 | 意图不明 / 投诉 / 操作类请求 | `handoff_to_human` | `reason` |
+
+兜底涵盖取消订单、办理退货换货、改地址、赔偿、转人工等一切需要执行动作的请求。用户明确要转人工时同样走 `handoff_to_human`。
+
+## 架构说明
+
+### ReAct 循环 + 意图回读
+
+```
+用户消息
+   │
+   ▼
+┌──────────────────────────────┐
+│ model 节点                    │  ← 决定调哪个工具，参数填什么
+│  ├─ 工具调用 ────────────────►│
+│  └─ 最终答复                  │
+└──────────────────────────────┘
+   │            ▲
+   ▼            │
+tools 节点      │
+（执行工具）────┘
+   │
+   ▼
+extract_intent：遍历本轮 tool call，
+用 TOOL_ROUTES 反查 intent
+   │
+   ▼
+CustomerServiceState
+（intent / tool_calls / retrieved_content / context）
+```
+
+意图不做二次 LLM 分类。function call 本身就是 LLM 的结构化输出，从实际调用的工具名反查意图，保证"记录的意图"和"执行的工具"永远不会分叉。
+
+`create_agent` 挂了 `InMemorySaver`，`user_id` 直接作为 `thread_id`，所以"这个多少钱""还有货吗"这类依赖上一轮的表述能真正跨轮使用。
+
+### 工具返回值
+
+五个工具统一返回 Pydantic 模型（`src/schemas.py`），同一份数据既回灌给 LLM，也直接作为 DeepEval 的 context。
+
+- `found`：是否查到实体
+- `needs_input`：没查到是因为参数缺失（需要追问），而不是实体不存在
+- `message`：没查到或缺参时给 LLM 的说明与话术
+- `to_text()`：命中时渲染成一行事实，既是 LLM 看到的 observation，也是 DeepEval 的 context
+
+缺参数时仍然调用工具、参数留空，工具返回 `needs_input=True`，Agent 据此向用户追问。这样每一轮都有确定的意图与工具调用，意图准确率才有意义。
+
+### 状态结构
+
+`CustomerServiceState` 包含：
+
+- `messages`：完整对话历史
+- `intent`：本轮意图，五个枚举值之一
+- `tool_calls`：工具调用记录（工具名、参数、结果摘要）
+- `retrieved_content`：本轮所有工具返回的文本拼接
+- `context`：`tool` / `params` / `extra_tools` / `fallback_reason`
+- `user_id`：会话标识
 
 ## 快速开始
 
 ### 1. 安装依赖
 
 ```bash
-pip install langgraph langchain-anthropic anthropic pytest pytest-asyncio python-dotenv
+pip install -r requirements.txt
 ```
 
 ### 2. 配置环境变量
 
-创建 `.env` 文件：
+在 `.env` 里写：
 
 ```env
-# 第三方中转配置（OpenAI兼容接口）
 OPENAI_API_KEY=your_api_key_here
 OPENAI_BASE_URL=https://api.example.com/v1
-MODEL_NAME=claude-3-5-sonnet-20241014
-
-# 如果使用原生OpenAI
-# OPENAI_API_KEY=sk-xxx
-# MODEL_NAME=gpt-4o
-
-# 如果使用Anthropic直接API
-# ANTHROPIC_API_KEY=sk-ant-xxx
-# MODEL_NAME=claude-sonnet-4-20250514
-
-# 日志级别
-LOG_LEVEL=INFO
+MODEL_NAME=your_model_name
 ```
+
+`MODEL_NAME` 同时被 Agent 和 DeepEval 使用（`DEEPEVAL_MODEL` 可单独覆盖评估用的模型）。
 
 ### 3. 运行测试
 
 ```bash
-# 运行所有测试
-pytest tests/ -v
+# 单元测试，不碰 LLM
+pytest tests/unit -v
 
-# 运行单元测试
-pytest tests/unit/test_tools.py -v
+# 集成测试与 DeepEval，需要 OPENAI_API_KEY
+pytest tests/integration -v
 
-# 运行集成测试
-pytest tests/integration/test_agent_flow.py -v
+# 全部
+pytest tests -v
 ```
 
-### 4. 验证 Agent
+集成测试带 `llm` 标记，缺少 `OPENAI_API_KEY` 时自动跳过。
+
+测试用 `tests/conftest.py` 把 `DATABASE_URL` 指向 `tests/.tmp/test.db`，不会碰开发库 `orders.db`。
+
+### 4. 五类意图端到端验证
 
 ```bash
 python verify_agent.py
 ```
 
+逐条断言 intent 与主工具名。
+
+### 5. Web 界面
+
+```bash
+streamlit run web_chat.py
+```
+
+会话以 Streamlit session 为单位，session id 即 `thread_id`，多轮上下文可用。
+
 ## 测试覆盖
 
-### 单元测试 (11 个)
-- `TestOrderTools`: 订单查询、取消订单
-- `TestFAQQueries`: FAQ检索
-- `TestReturnTools`: 退换货处理
-- `TestPolicyTools`: 政策查询
+### 单元测试（34 个，不依赖 LLM）
 
-### 集成测试 (14 个)
-- 问候/告别流程
-- 订单查询流程
-- 退换货申请流程
-- 政策查询流程
-- FAQ问答流程
-- 完整对话流程
+- `test_tools.py`：五个工具的命中与未命中、缺参数、乱序订单号抽取、商品名从整句问法里识别、订单状态回归（曾因跨枚举查表恒为"待发货"）
+- `test_intent.py`：`TOOL_ROUTES` 映射、`extract_intent` 对单工具 / 多工具 / 零工具的判定、假模型驱动真实 ReAct 循环
+
+### 集成测试（14 个，需要真实 LLM）
+
+- `test_agent_flow.py`：五类意图各一条典型问法，断言 `intent` 与 `context["tool"]`；缺参数仍产生工具调用；多轮上下文延续
+- `test_deepeval.py`：`AnswerRelevancy` / `Faithfulness` / `Hallucination` / `Toxicity`，context 一律取自 `retrieved_content`
 
 ## 测试数据
 
-### 订单号
-| 订单号 | 状态 | 商品 |
-|--------|------|------|
-| ORD2024001 | 已发货 | iPhone 15 Pro Max、AirPods Pro 2 |
-| ORD2024002 | 已签收 | MacBook Pro 14寸、Magic Mouse |
-| ORD2024003 | 待发货 | iPad Air 5、Apple Pencil |
-| ORD2024004 | 已取消 | Sony WH-1000XM5 |
+| 订单号 | 状态 | 商品 | 物流 |
+|---|---|---|---|
+| ORD2024001 | 已发货 | iPhone 15 Pro Max、AirPods Pro 2 | 顺丰速运，在途 |
+| ORD2024002 | 已签收 | MacBook Pro 14寸、Magic Mouse | 中通快递，已签收 |
+| ORD2024003 | 待发货 | iPad Air 5、Apple Pencil | 无物流记录 |
+| ORD2024004 | 已取消 | Sony WH-1000XM5 | 无物流记录 |
+
+ORD2024003 与 ORD2024004 刻意不配物流，"该订单暂无物流信息"是一个真实的可测场景。`SKU-SONY-WH1000XM5` 库存为 0，用于"还有货吗"的用例。
 
 ## 使用示例
 
 ```python
-from src.agent.customer_service_agent import CustomerServiceAgent
+from src.agent.react_agent import ReactCustomerServiceAgent
 
-agent = CustomerServiceAgent()pyth
+agent = ReactCustomerServiceAgent()
 
-# 问候
-result = agent.invoke("你好")
+result = agent.invoke("iPhone 15 Pro Max 256GB 多少钱")
+print(result["intent"])             # Intent.PRODUCT_QUERY
+print(result["context"]["tool"])     # query_product
+print(result["retrieved_content"])   # 工具返回的事实
 print(result["messages"][-1].content)
 
-# 订单查询
-result = agent.invoke("查一下订单ORD2024001")
-print(result["messages"][-1].content)
-
-# 退换货
-result = agent.invoke("退货订单ORD2024003")
-print(result["messages"][-1].content)
-
-# 政策查询
-result = agent.invoke("配送政策是什么")
-print(result["messages"][-1].content)
-
-# FAQ
-result = agent.invoke("运费如何计算")
-print(result["messages"][-1].content)
-
-# 使用LLM进行意图识别（需要配置OPENAI_API_KEY）
-agent = CustomerServiceAgent(use_llm_routing=True)
-result = agent.invoke("我的订单什么时候能到")
-print(result["messages"][-1].content)
+# 多轮：user_id 即会话 thread_id
+agent.invoke("iPhone 15 Pro Max 256GB 多少钱", user_id="u1")
+result = agent.invoke("这个还有货吗", user_id="u1")
 ```
-
-## 架构说明
-
-### LangGraph 流程
-
-```
-START
-  │
-  ▼
-routing (意图分类)
-  │
-  ├── greeting_node ──────────────────────► END
-  │
-  ├── order_query_node ──────────────────► END
-  │
-  ├── return_exchange_node ──────────────► END
-  │
-  ├── policy_query_node ─────────────────► END
-  │
-  ├── faq_node ─────────────────────────► END
-  │
-  └── goodbye_node ─────────────────────► END
-```
-
-### 状态管理
-
-`CustomerServiceState` 包含：
-- `messages`: 对话历史
-- `intent`: 当前意图
-- `order_info`: 订单信息
-- `return_request`: 退换货请求
-- `current_node`: 当前节点
-- `next_node`: 下一节点
-- `context`: 上下文数据
-- `user_id`: 用户ID
 
 ## License
 

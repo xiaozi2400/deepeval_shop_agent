@@ -2,20 +2,9 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Literal, TypedDict
+from typing import TypedDict
 
-from langgraph.graph import add_messages
-
-
-class Intent(Enum):
-    """用户意图枚举"""
-    GREETING = "greeting"
-    ORDER_QUERY = "order_query"
-    RETURN_EXCHANGE = "return_exchange"
-    POLICY_QUERY = "policy_query"
-    FAQ = "faq"
-    FALLBACK = "fallback"
-    GOODBYE = "goodbye"
+from src.agent.intent import Intent, ToolCallRecord
 
 
 class OrderStatus(Enum):
@@ -37,25 +26,11 @@ class OrderInfo:
     created_at: datetime
 
 
-@dataclass
-class ReturnRequest:
-    """退换货请求"""
-    order_id: str
-    reason: str
-    request_type: str
-    status: str = "pending"
-
-
 class CustomerServiceState(TypedDict, total=False):
-    """LangGraph共享状态"""
-    messages: Annotated[list, add_messages]
-    intent: Intent | None
-    order_info: OrderInfo | None
-    return_request: ReturnRequest | None
-    current_node: str
-    next_node: str
-    context: dict
+    """一轮对话结束后返回给调用方的状态"""
+    messages: list                     # 完整对话历史 + 本轮回复
+    intent: Intent | None              # 本轮判定的意图
+    tool_calls: list[ToolCallRecord]   # 本轮发生的函数调用
+    retrieved_content: str | None      # 工具返回内容，DeepEval context 的来源
+    context: dict                      # 工具名、参数、兜底成因等
     user_id: str | None
-    # 新增字段
-    response_mode: Literal["rule", "llm"] | None  # 响应模式
-    retrieved_content: str | None                  # 检索到的内容

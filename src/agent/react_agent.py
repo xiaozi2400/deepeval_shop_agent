@@ -1,91 +1,75 @@
 """LangChain ReAct 架构的电商客服 Agent"""
 import os
+import uuid
 from typing import Literal
 
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessageChunk, BaseMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 
+from src.agent.intent import IntentResult, extract_intent
 from src.agent.state import CustomerServiceState
 from src.database.connection import init_db
+from src.prompts.system_prompts import AGENT_SYSTEM_PROMPT
 
 load_dotenv()
 
 
 # 工具列表
 def get_tools():
-    """获取所有工具"""
-    from src.tools.faq_tools import search_faq, get_all_faqs
-    from src.tools.order_tools import query_order, cancel_order, get_valid_order_ids, get_all_orders
-    from src.tools.policy_tools import query_policy, get_all_policies
-    from src.tools.return_tools import process_return_request, check_return_status, validate_return_eligibility
+    """获取工具列表：五个意图各对应一个工具"""
+    from src.tools.handoff_tools import handoff_to_human
+    from src.tools.logistics_tools import query_logistics
+    from src.tools.order_tools import query_order
+    from src.tools.policy_tools import search_policy
+    from src.tools.product_tools import query_product
 
     return [
-        search_faq,
-        get_all_faqs,
+        query_product,
         query_order,
-        cancel_order,
-        get_valid_order_ids,
-        get_all_orders,
-        query_policy,
-        get_all_policies,
-        process_return_request,
-        check_return_status,
-        validate_return_eligibility,
+        query_logistics,
+        search_policy,
+        handoff_to_human,
     ]
 
 
-# 系统提示词
-SYSTEM_PROMPT = """你是一个电商客服助手。你的目标是帮助用户解答问题、处理订单查询、退换货申请和政策咨询。
-
-你可以通过以下工具来帮助用户：
-- search_faq: 搜索FAQ知识库回答常见问题
-- query_order: 查询订单详细信息
-- cancel_order: 取消未发货的订单
-- get_all_orders: 获取用户所有订单
-- query_policy: 查询平台政策（配送、退换货、支付、会员）
-- process_return_request: 处理退换货申请
-- check_return_status: 查询退换货状态
-- validate_return_eligibility: 验证退换货资格
-
-请根据用户的问题，选择合适的工具来回答。如果需要用户提供更多信息，请友好地询问。
-
-回复时使用友好、专业的语气。"""
-
-
 class ReactCustomerServiceAgent:
-    """基于 LangChain ReAct 架构的客服 Agent"""
+    """基于 LangChain ReAct 架构的客服 Agent
+
+    每一轮对话的意图由 ReAct 循环里实际发出的 function call 决定，
+    再由 TOOL_ROUTES 反查得到，因此记录的意图与执行的工具永远一致。
+    """
 
     def __init__(
         self,
         model_provider: Literal["openai", "anthropic"] = "openai",
-        model_name: str = None,
+        model_name: str | None = None,
         temperature: float = 0,
+        llm=None,
     ):
         """
         初始化 ReAct Agent
 
         Args:
             model_provider: 模型提供商 ("openai" 或 "anthropic")
-            model_name: 模型名称，默认根据 provider 使用合适的模型
+            model_name: 模型名称，默认取环境变量 MODEL_NAME
             temperature: 模型温度参数
+            llm: 自定义模型实例，传入时不再从环境变量构造（测试用假模型注入）
         """
         self.model_provider = model_provider
         self.temperature = temperature
 
-        # 设置默认模型
-        if model_name is None:
-            model_name = os.getenv("MODEL_NAME")
-        # 初始化 LLM
-        self._init_llm(model_provider, model_name)
+        if llm is not None:
+            self.llm = llm
+        else:
+            if model_name is None:
+                model_name = os.getenv("MODEL_NAME")
+            self._init_llm(model_provider, model_name)
 
-        # 获取工具列表
         self.tools = get_tools()
 
-        # 初始化数据库
         init_db()
 
-        # 构建 Agent
         self._build_agent()
 
     def _init_llm(self, provider: str, model_name: str):
@@ -107,14 +91,18 @@ class ReactCustomerServiceAgent:
             raise ValueError(f"Unsupported model provider: {provider}")
 
     def _build_agent(self):
-        """构建 ReAct Agent"""
+        """构建 ReAct Agent，挂上 checkpointer 以支持多轮对话"""
         from langchain.agents import create_agent
+        from langgraph.checkpoint.memory import InMemorySaver
 
-        # 使用 langchain 1.x 的 create_agent
+        self.checkpointer = InMemorySaver()
+        self._default_thread_id = f"default-{uuid.uuid4()}"
+
         self.agent = create_agent(
             self.llm,
             self.tools,
-            system_prompt=SYSTEM_PROMPT
+            system_prompt=AGENT_SYSTEM_PROMPT,
+            checkpointer=self.checkpointer,
         )
 
     def invoke(
@@ -127,33 +115,22 @@ class ReactCustomerServiceAgent:
 
         Args:
             user_message: 用户输入消息
-            user_id: 用户ID（可选）
+            user_id: 用户ID，用作会话 thread_id，缺省时共用一个默认会话
 
         Returns:
-            Agent 执行结果
+            Agent 执行结果，含本轮意图、函数调用记录与工具返回内容
         """
-        # 构建输入
-        input_messages = [HumanMessage(content=user_message)]
+        sent = HumanMessage(content=user_message, id=f"user-{uuid.uuid4()}")
 
-        # 执行 Agent
-        result = self.agent.invoke({"messages": input_messages})
+        result = self.agent.invoke(
+            {"messages": [sent]},
+            config={"configurable": {"thread_id": user_id or self._default_thread_id}},
+        )
 
-        # 提取最终响应
-        messages = result.get("messages", [])
-        final_message = messages[-1] if messages else None
+        messages = list(result.get("messages", []))
+        intent_result = extract_intent(self._current_turn(messages, sent.id))
 
-        return {
-            "messages": [final_message] if final_message else [],
-            "intent": None,
-            "order_info": None,
-            "return_request": None,
-            "current_node": "react_agent",
-            "next_node": "",
-            "context": {},
-            "user_id": user_id,
-            "response_mode": "llm",
-            "retrieved_content": None
-        }
+        return self._build_state(messages, intent_result, user_id)
 
     def stream(
         self,
@@ -165,12 +142,80 @@ class ReactCustomerServiceAgent:
 
         Args:
             user_message: 用户输入消息
-            user_id: 用户ID（可选）
+            user_id: 用户ID，用作会话 thread_id
 
         Yields:
-            Agent 执行过程中的输出
+            助手回复的文本片段
         """
-        input_messages = [HumanMessage(content=user_message)]
+        sent = HumanMessage(content=user_message, id=f"user-{uuid.uuid4()}")
 
-        for event in self.agent.stream({"messages": input_messages}):
-            yield event
+        current_id = None
+        buffer: list[str] = []
+        has_tool_call = False
+
+        for chunk in self.agent.stream(
+            {"messages": [sent]},
+            config={"configurable": {"thread_id": user_id or self._default_thread_id}},
+            stream_mode="messages",
+        ):
+            message = chunk[0] if isinstance(chunk, tuple) else chunk
+            if not isinstance(message, AIMessageChunk):
+                continue
+
+            if message.id != current_id:
+                # 上一条模型消息已完整：带工具调用的那一轮是过程语，不进正文
+                if buffer and not has_tool_call:
+                    yield "".join(buffer)
+                current_id = message.id
+                buffer = []
+                has_tool_call = False
+
+            if message.tool_calls:
+                has_tool_call = True
+            content = getattr(message, "content", "")
+            if isinstance(content, str) and content:
+                buffer.append(content)
+
+        if buffer and not has_tool_call:
+            yield "".join(buffer)
+
+    def _current_turn(self, messages: list[BaseMessage], sent_id: str) -> list[BaseMessage]:
+        """截取本轮产生的消息，排除历史轮次
+
+        checkpointer 会把整个会话历史都放进结果里，
+        而意图只应依据本轮发出的 function call 判定。
+        """
+        for index, message in enumerate(messages):
+            if getattr(message, "id", None) == sent_id:
+                return messages[index + 1:]
+        return []
+
+    def _build_state(
+        self,
+        messages: list[BaseMessage],
+        intent_result: IntentResult,
+        user_id: str | None,
+    ) -> CustomerServiceState:
+        """把执行结果整理成对外的状态"""
+        observations = [r.result_text for r in intent_result.tool_calls if r.result_text]
+        retrieved_content = "\n\n".join(observations) if observations else None
+
+        context: dict = {}
+        if intent_result.primary_tool:
+            context["tool"] = intent_result.primary_tool
+        primary = intent_result.primary
+        if primary is not None:
+            context["params"] = primary.args
+        if intent_result.extra_tools:
+            context["extra_tools"] = intent_result.extra_tools
+        if intent_result.fallback_reason:
+            context["fallback_reason"] = intent_result.fallback_reason
+
+        return {
+            "messages": messages,
+            "intent": intent_result.intent,
+            "tool_calls": intent_result.tool_calls,
+            "retrieved_content": retrieved_content,
+            "context": context,
+            "user_id": user_id,
+        }

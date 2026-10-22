@@ -27,10 +27,10 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 def init_db() -> None:
     """初始化数据库，创建表并填充初始数据"""
     from src.database.models import Base
-    from src.database.seed import seed_initial_orders
+    from src.database.seed import seed_all
 
     Base.metadata.create_all(bind=engine)
-    seed_initial_orders()
+    seed_all()
 
 
 @contextmanager

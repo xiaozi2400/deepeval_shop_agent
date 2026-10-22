@@ -1,11 +1,14 @@
-"""电商客服Agent Web聊天界面"""
-import time
+"""电商客服Agent Web聊天界面
+
+会话以 Streamlit session 为单位，session id 直接当作 Agent 的 thread_id，
+这样"这个多少钱"这类依赖上一轮的表述在界面上才真的可用。
+"""
+import uuid
 
 import streamlit as st
 
 from src.agent.react_agent import ReactCustomerServiceAgent
 
-# 页面配置
 st.set_page_config(
     page_title="电商客服助手",
     page_icon="🤖",
@@ -20,6 +23,8 @@ def init_session_state():
     """初始化会话状态"""
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "thread_id" not in st.session_state:
+        st.session_state.thread_id = f"web-{uuid.uuid4()}"
     if "agent" not in st.session_state:
         try:
             st.session_state.agent = ReactCustomerServiceAgent()
@@ -29,39 +34,14 @@ def init_session_state():
             st.stop()
 
 
-def get_agent_response(user_message: str) -> str:
-    """获取Agent回复"""
-    try:
-        result = st.session_state.agent.invoke(user_message)
-        messages = result.get("messages", [])
-        if messages:
-            return messages[-1].content
-        return "抱歉，我没有收到回复。"
-    except Exception as e:
-        return f"处理消息时出错: {e}"
-
-
 def stream_agent_response(user_message: str):
     """流式获取Agent回复"""
     try:
-        full_response = ""
-        for event in st.session_state.agent.stream(user_message):
-            # 从事件中提取 AI 消息
-            if hasattr(event, 'content') and event.content:
-                full_response = event.content
-                yield event.content
-                time.sleep(0.03)
-            elif isinstance(event, dict):
-                for value in event.values():
-                    if isinstance(value, dict) and "messages" in value:
-                        messages = value["messages"]
-                        if messages:
-                            content = messages[-1].content
-                            if content:
-                                full_response = content
-                                yield content
-                                time.sleep(0.03)
-        if not full_response:
+        produced = False
+        for piece in st.session_state.agent.stream(user_message, user_id=st.session_state.thread_id):
+            produced = True
+            yield piece
+        if not produced:
             yield "抱歉，我没有收到回复。"
     except Exception as e:
         yield f"处理消息时出错: {e}"
@@ -70,32 +50,26 @@ def stream_agent_response(user_message: str):
 def main():
     init_session_state()
 
-    # 显示聊天历史
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # 处理用户输入
     if prompt := st.chat_input("请输入您的问题...", key="chat_input"):
-        # 显示用户消息
         with st.chat_message("user"):
             st.markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
 
-        # 调用Agent获取回复（流式）
         with st.chat_message("assistant"):
             response_container = st.empty()
             full_response = ""
 
-            for chunk in stream_agent_response(prompt):
-                full_response += chunk
+            for piece in stream_agent_response(prompt):
+                full_response += piece
                 response_container.markdown(full_response + "▌")
 
             response_container.markdown(full_response)
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
 
-        # 重新渲染以更新输入框
-        st.rerun()
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 
 if __name__ == "__main__":

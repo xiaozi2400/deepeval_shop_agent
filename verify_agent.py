@@ -1,51 +1,63 @@
-"""快速验证脚本 - 验证ReAct Agent核心功能"""
+"""五类意图端到端验证脚本
+
+每条用例断言两件事：判出的 intent 与实际执行的主工具。
+两者都从 ReAct 循环里真实的 function call 推导，不看回复文本长什么样。
+
+用法：
+    python verify_agent.py
+"""
 import sys
 
 sys.path.insert(0, '.')
 
+from src.agent.intent import Intent, TOOL_ROUTES
 from src.agent.react_agent import ReactCustomerServiceAgent
 
+CASES = [
+    ("iPhone 15 Pro Max 256GB 多少钱", Intent.PRODUCT_QUERY, "query_product"),
+    ("查一下订单 ORD2024001", Intent.ORDER_QUERY, "query_order"),
+    ("ORD2024001 的快递到哪了", Intent.LOGISTICS_QUERY, "query_logistics"),
+    ("能七天无理由吗", Intent.POLICY_QUERY, "search_policy"),
+    ("你们服务太差了，我要投诉", Intent.FALLBACK, "handoff_to_human"),
+]
 
-def test_agent():
-    print("=" * 50)
-    print("电商客服ReAct Agent 验证测试")
-    print("=" * 50)
+
+def run():
+    print("=" * 60)
+    print("电商客服 ReAct Agent - 五类意图验证")
+    print("=" * 60)
 
     agent = ReactCustomerServiceAgent()
+    failures = []
 
-    test_cases = [
-        ("你好", "问候测试"),
-        ("帮我查订单ORD2024001", "订单查询测试"),
-        ("我要退货，订单ORD2024003", "退货申请测试"),
-        ("配送政策是什么", "政策查询测试"),
-        ("运费怎么算", "FAQ测试"),
-    ]
+    for index, (message, expected_intent, expected_tool) in enumerate(CASES, 1):
+        result = agent.invoke(message, user_id=f"verify-{index}")
+        actual_intent = result["intent"]
+        actual_tool = result["context"].get("tool")
+        reply = result["messages"][-1].content
 
-    all_passed = True
-    for i, (message, desc) in enumerate(test_cases, 1):
-        try:
-            result = agent.invoke(message)
-            messages = result.get("messages", [])
-            response = messages[-1].content if messages else ""
+        ok = actual_intent == expected_intent and actual_tool == expected_tool
+        # 意图必须能从 TOOL_ROUTES 反查回同一批工具，路由表才是唯一事实来源
+        route_ok = TOOL_ROUTES.get(actual_tool, (None,))[0] == actual_intent
 
-            # ReAct Agent 不返回 intent，我们检查是否有有效响应
-            passed = bool(response) and len(response) > 0
-            status = "[PASS]" if passed else "[FAIL]"
-            print(f"\n{status} {desc} ({i}/{len(test_cases)})")
-            print(f"  输入: {message}")
-            print(f"  响应: {response[:80]}...")
-            if not passed:
-                all_passed = False
-        except Exception as e:
-            print(f"\n[FAIL] {desc} - Error: {e}")
-            all_passed = False
+        print(f"\n[{'PASS' if ok and route_ok else 'FAIL'}] {index}/{len(CASES)} {message}")
+        print(f"  意图: {actual_intent.value} (期望 {expected_intent.value})")
+        print(f"  工具: {actual_tool} (期望 {expected_tool})")
+        print(f"  回复: {reply.splitlines()[0][:80]}")
+        if not (ok and route_ok):
+            failures.append((message, expected_intent, expected_tool, actual_intent, actual_tool))
 
-    print("\n" + "=" * 50)
-    if all_passed:
-        print("All tests passed!")
+    print("\n" + "=" * 60)
+    if failures:
+        print(f"{len(failures)} 条用例未通过：")
+        for message, ei, et, ai, at in failures:
+            print(f"  {message}: 期望 {ei.value}/{et}，实际 {ai.value}/{at}")
     else:
-        print("Some tests failed, please check.")
-    print("=" * 50)
+        print("全部用例通过")
+    print("=" * 60)
+
+    return 1 if failures else 0
+
 
 if __name__ == "__main__":
-    test_agent()
+    sys.exit(run())
