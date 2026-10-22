@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+# 同一分支的新提交取消旧运行
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: 单元测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 安装依赖
+        # --frozen 表示不重新解析，严格按 uv.lock 装，保证可复现
+        run: uv sync --all-extras --frozen
+
+      - name: 单元测试
+        # 单测不碰 LLM，不需要任何密钥
+        run: uv run pytest tests/unit -v
+
+      - name: lint
+        run: uv run ruff check .
+
+  integration:
+    name: 集成测试
+    runs-on: ubuntu-latest
+    # 需要真实 LLM。没配密钥时这一档会跳过，
+    # PR 上想跑可以给仓库加 OPENAI_API_KEY secret。
+    if: ${{ secrets.OPENAI_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 安装依赖
+        run: uv sync --all-extras --frozen
+
+      - name: 集成测试
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          MODEL_NAME: ${{ secrets.MODEL_NAME }}
+          DEEPEVAL_MODEL: ${{ secrets.DEEPEVAL_MODEL }}
+        run: uv run pytest tests/integration -v
+
+  intent-check:
+    name: 五类意图端到端
+    runs-on: ubuntu-latest
+    if: ${{ secrets.OPENAI_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 安装依赖
+        run: uv sync --all-extras --frozen
+
+      - name: 端到端验证
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          MODEL_NAME: ${{ secrets.MODEL_NAME }}
+        run: uv run python scripts/verify_agent.py

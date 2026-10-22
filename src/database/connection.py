@@ -1,8 +1,8 @@
 """数据库连接和会话管理"""
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.database.config import DATABASE_URL, SQLITE_ECHO

@@ -11,11 +11,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-# Windows 控制台默认 GBK，模型回复里的特殊字符会触发 UnicodeEncodeError。
-for _stream in (sys.stdout, sys.stderr):
-    if hasattr(_stream, "reconfigure"):
-        _stream.reconfigure(encoding="utf-8", errors="replace")
-
 from src.agent.intent import TOOL_ROUTES, Intent
 from src.agent.react_agent import ReactCustomerServiceAgent
 
@@ -29,6 +24,12 @@ CASES = [
 
 
 def run():
+    # Windows 控制台默认 GBK，模型回复里的特殊字符会触发 UnicodeEncodeError。
+    # 放在 run() 里而不是模块顶部，模块级 import 之前不留多余语句。
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+
     print("=" * 60)
     print("电商客服 ReAct Agent - 五类意图验证")
     print("=" * 60)
