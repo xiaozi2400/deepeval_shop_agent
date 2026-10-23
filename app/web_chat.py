@@ -14,6 +14,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from src.agent.llm_guard import UpstreamLLMError
 from src.agent.react_agent import ReactCustomerServiceAgent
 
 st.set_page_config(
@@ -55,6 +56,10 @@ def stream_agent_response(user_message: str):
             yield piece
         if not produced:
             yield "抱歉，我没有收到回复。"
+    except UpstreamLLMError as e:
+        # 上游网关拒了这次请求（额度、限流等）。说清楚原因，
+        # 否则用户只看到"我没有收到回复"，排查只能去翻 LangSmith。
+        yield f"模型服务暂时不可用（错误码 {e.status_code}）：{e.status_msg}"
     except Exception as e:
         yield f"处理消息时出错: {e}"
 

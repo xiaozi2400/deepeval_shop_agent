@@ -5,9 +5,9 @@ from typing import Literal
 
 from dotenv import load_dotenv
 from langchain_core.messages import AIMessageChunk, BaseMessage, HumanMessage
-from langchain_openai import ChatOpenAI
 
 from src.agent.intent import IntentResult, extract_intent
+from src.agent.llm_guard import GuardedChatOpenAI
 from src.agent.state import CustomerServiceState
 from src.database.connection import init_db
 from src.prompts.system_prompts import AGENT_SYSTEM_PROMPT
@@ -84,7 +84,9 @@ class ReactCustomerServiceAgent:
             if not api_key:
                 raise ValueError("OPENAI_API_KEY not found in environment")
 
-            self.llm = ChatOpenAI(
+            # GuardedChatOpenAI 会在上游返回业务错误时抛 UpstreamLLMError，
+            # 而不是让流式响应带着空内容混过去。
+            self.llm = GuardedChatOpenAI(
                 model=model_name or "gpt-3.5-turbo",
                 api_key=api_key,
                 base_url=base_url or None,
