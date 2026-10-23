@@ -51,6 +51,7 @@ model 节点 ──tool call──► tools 节点 ──observation──► mo
 - 工具集严格按五分类表收敛。取消订单、退换货受理这类能力归入"操作类请求"，走 `handoff_to_human` 并落一条 `handoffs` 记录，返回工单号。
 - 意图判定完全依赖 LLM 的工具选择，提示词是唯一的消歧依据。提示词变更需要重跑集成测试。
 - 集成测试需要真实 LLM，缺少 `OPENAI_API_KEY` 时跳过。单元测试用 `FakeToolCallingModel` 驱动真实 ReAct 循环，不烧 token。
+- 上游 OpenAI 兼容网关的额度、限流这类业务错误，返回体是 HTTP 200 加 `choices: null`，真实原因放在 `base_resp`。`GuardedChatOpenAI` 在响应转换处把它翻译成 `UpstreamLLMError`，避免流式路径把错误吞成空回复。
 
 ---
 
